@@ -4,6 +4,9 @@ r.place_result = "EquipmentGridLogisticModule-requester"
 r.collision_mask = {}
 r.minable = nil
 r.flags = {
+    "hidden",
+    "hide-alt-info",
+    "not-selectable-in-game",
     "player-creation",
     "not-rotatable",
     "not-repairable",
@@ -21,18 +24,25 @@ r.animation = {
         }
     }
 }
+r.bounding_box = {{0, 0}, {0, 0}}
+r.selection_box = {{0, 0}, {0, 0}}
 r.selectable_in_game = false
-r.logistic_slots_count = 6 -- made bigger to handle large cargo vehicles like cargo airplane
-r.inventory_size = 6 -- made bigger to handle large cargo vehicles like cargo airplane
+r.logistic_slots_count = 48 -- made bigger to handle large cargo vehicles like cargo airplane
+r.inventory_size = 48 -- made bigger to handle large cargo vehicles like cargo airplane
 
 data:extend({r})
 
-local r = table.deepcopy(data.raw["logistic-container"]["logistic-chest-active-provider"])
-r.name = "EquipmentGridLogisticModule-provider"
-r.place_result = "EquipmentGridLogisticModule-provider"
-r.collision_mask = {}
-r.minable = nil
-r.flags = {
+local p = table.deepcopy(data.raw["logistic-container"]["logistic-chest-active-provider"])
+p.name = "EquipmentGridLogisticModule-provider"
+p.place_result = "EquipmentGridLogisticModule-provider"
+p.bounding_box = {{0, 0}, {0, 0}}
+p.selection_box = {{0, 0}, {0, 0}}
+p.collision_mask = {}
+p.minable = nil
+p.flags = {
+    "hidden",
+    "hide-alt-info",
+    "not-selectable-in-game",
     "player-creation",
     "not-rotatable",
     "not-repairable",
@@ -41,7 +51,7 @@ r.flags = {
     "not-blueprintable",
     "not-flammable"
 }
-r.animation = {
+p.animation = {
     layers = {
         {
             filename = "__EquipmentGridLogisticModule__/nothing.png",
@@ -50,7 +60,7 @@ r.animation = {
         }
     }
 }
-r.selectable_in_game = false
-r.inventory_size = 1 -- only manage one stack at a time
+p.selectable_in_game = false
+p.inventory_size = 48
 
-data:extend({r})
+data:extend({p})

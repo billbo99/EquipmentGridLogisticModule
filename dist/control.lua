@@ -88,11 +88,19 @@ local function vehiclePackup(vehicle)
             local output = provider.get_inventory(defines.inventory.chest)
 
             for name, count in pairs(input.get_contents()) do
-                trunk.insert({name = name, count = count})
+                local moved = trunk.insert({name = name, count = count})
+                if moved ~= count then
+                    note("need to spill onto ground")
+                    unit.vehicle.surface.spill_item_stack(unit.vehicle.position, {name = name, count = count - moved}, nil, unit.vehicle.force)
+                end
             end
 
             for name, count in pairs(output.get_contents()) do
-                trunk.insert({name = name, count = count})
+                local moved = trunk.insert({name = name, count = count})
+                if moved ~= count then
+                    note("need to spill onto ground")
+                    unit.vehicle.surface.spill_item_stack(unit.vehicle.position, {name = name, count = count - moved}, nil, unit.vehicle.force)
+                end
             end
 
             requester.destroy()
@@ -124,6 +132,7 @@ local function vehicleUnpack(vehicle)
                     force = vehicle.force
                 }
             )
+
             unit.provider =
                 vehicle.surface.create_entity(
                 {
@@ -158,6 +167,15 @@ local function vehicleProcess(vehicle)
     local unit = mod.vehicles[vehicle.unit_number]
     local requester = unit.requester
     local provider = unit.provider
+    if unit.max_provider_slot_count and unit.max_provider_slot_count > 0 then
+        provider.get_inventory(defines.inventory.chest).set_bar(unit.max_provider_slot_count + 1)
+    else
+        provider.get_inventory(defines.inventory.chest).set_bar(2)
+    end
+
+    if unit.request_from_buffers ~= nil then
+        requester.request_from_buffers = unit.request_from_buffers
+    end
 
     local trunk = nil
     if vehicle.type == "car" then
@@ -177,16 +195,29 @@ local function vehicleProcess(vehicle)
         if moved > 0 then
             input.remove({name = name, count = moved})
         end
+        local left_behind = count - moved
+        if left_behind > 0 then
+            local stack = {name = name, count = left_behind}
+            if output.can_insert(stack) then
+                output.insert(stack)
+                input.remove(stack)
+            end
+        end
     end
 
     if vehicle.burner ~= nil then
-        local item = vehicle.burner.currently_burning
-        if item ~= nil then
-            local available = trunk.get_item_count(item.name)
-            if available > 0 then
-                local moved = vehicle.burner.inventory.insert({name = item.name, count = available})
-                if moved > 0 then
-                    trunk.remove({name = item.name, count = moved})
+        local inv = vehicle.burner.inventory
+        for name, _ in pairs(inv.get_contents()) do
+            if name ~= nil then
+                local available = trunk.get_item_count(name)
+                if available > 0 then
+                    local stack = {name = name, count = available}
+                    if inv.can_insert(stack) then
+                        local moved = vehicle.burner.inventory.insert(stack)
+                        if moved > 0 then
+                            trunk.remove({name = name, count = moved})
+                        end
+                    end
                 end
             end
         end
@@ -219,17 +250,94 @@ local function vehicleProcess(vehicle)
         end
     end
 
-    for i = 1, 6, 1 do
+    for i = 1, requester.request_slot_count, 1 do
         requester.clear_request_slot(i)
     end
 
     local i = 1
     for name, count in pairs(requests) do
-        if i > 6 then
+        if i > (unit.max_requester_slot_count or 6) then
             break
         end
-        requester.set_request_slot({name = name, count = count}, i)
-        i = i + 1
+        if requester.logistic_network.get_item_count(name) > 0 then
+            requester.set_request_slot({name = name, count = count}, i)
+            i = i + 1
+        end
+    end
+end
+
+-- defines.train_state.on_the_path	Normal state -- following the path.
+-- defines.train_state.path_lost	Had path and lost it -- must stop.
+-- defines.train_state.no_schedule	Doesn't have anywhere to go.
+-- defines.train_state.no_path	Has no path and is stopped.
+-- defines.train_state.arrive_signal	Braking before a rail signal.
+-- defines.train_state.wait_signal	Waiting at a signal.
+-- defines.train_state.arrive_station	Braking before a station.
+-- defines.train_state.wait_station	Waiting at a station.
+-- defines.train_state.manual_control_stop	Switched to manual control and has to stop.
+-- defines.train_state.manual_control	Can move if user explicitly sits in and rides the train.
+
+local function OnTrainChangedState(event)
+    local train = event.train
+    local old_state = event.old_state
+    local early_exit = true
+
+    -- only care has stopped at a station or has left a station
+    if train.state == defines.train_state.wait_station or old_state == defines.train_state.wait_station then
+        for _, wagon in pairs(train.cargo_wagons) do
+            local id = wagon.unit_number
+            if mod.vehicles[id] then
+                early_exit = false
+            end
+        end
+    end
+
+    -- only care about trains with cargo wagons that are being tracked.
+    if early_exit then
+        return
+    end
+
+    if train.state == defines.train_state.wait_station then
+        if train.station and train.station.get_merged_signals() then
+            for _, item in pairs(train.station.get_merged_signals()) do
+                if item.signal and item.signal.type == "virtual" then
+                    if item.signal.name == "logistics-active-provider" and item.count > 0 then
+                        for _, wagon in pairs(train.cargo_wagons) do
+                            local id = wagon.unit_number
+                            if mod.vehicles[id] then
+                                mod.vehicles[id].max_provider_slot_count = min(item.count, 48)
+                            end
+                        end
+                    end
+                    if item.signal.name == "logistics-requester" and item.count > 0 then
+                        for _, wagon in pairs(train.cargo_wagons) do
+                            local id = wagon.unit_number
+                            if mod.vehicles[id] then
+                                mod.vehicles[id].max_requester_slot_count = min(item.count, 48)
+                            end
+                        end
+                    end
+                    if item.signal.name == "logistics-request-from-buffer" then
+                        for _, wagon in pairs(train.cargo_wagons) do
+                            local id = wagon.unit_number
+                            if mod.vehicles[id] then
+                                mod.vehicles[id].request_from_buffers = true
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    if old_state == defines.train_state.wait_station then
+        for _, wagon in pairs(train.cargo_wagons) do
+            local id = wagon.unit_number
+            if mod.vehicles[id] then
+                mod.vehicles[id].request_from_buffers = false
+                mod.vehicles[id].max_provider_slot_count = nil
+                mod.vehicles[id].max_requester_slot_count = nil
+            end
+        end
     end
 end
 
@@ -286,12 +394,19 @@ end
 local function OnNthTick(event)
     InitState()
     -- if there is no queued event for this tick then there is nothing todo
-    local queue = mod.queues ~= nil and mod.queues[game.tick]
-    if queue == nil then
-        return
+    local queue = {}
+    for schedule_tick, work in pairs(mod.queues) do
+        if schedule_tick <= event.tick then
+            for _, job in pairs(work) do
+                table.insert(queue, job)
+            end
+            mod.queues[schedule_tick] = nil
+        end
     end
 
-    mod.queues[game.tick] = nil
+    if #queue == 0 then
+        return
+    end
 
     for _, vehicle in ipairs(queue) do
         if vehicle.valid and mod.vehicles[vehicle.unit_number] ~= nil then
@@ -319,6 +434,7 @@ local function attach_events()
     script.on_event({defines.events.on_pre_player_mined_item, defines.events.on_robot_pre_mined, defines.events.on_entity_died}, OnEntityRemoved)
     script.on_event({defines.events.on_player_placed_equipment}, OnPlacedEquipment)
     script.on_event({defines.events.on_player_removed_equipment}, OnRemovedEquipment)
+    script.on_event({defines.events.on_train_changed_state}, OnTrainChangedState)
 end
 
 script.on_init(
