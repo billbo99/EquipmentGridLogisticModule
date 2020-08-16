@@ -27,8 +27,9 @@ r.animation = {
 r.bounding_box = {{0, 0}, {0, 0}}
 r.selection_box = {{0, 0}, {0, 0}}
 r.selectable_in_game = false
-r.logistic_slots_count = 48 -- made bigger to handle large cargo vehicles like cargo airplane
-r.inventory_size = 48 -- made bigger to handle large cargo vehicles like cargo airplane
+local min_size = math.min(settings.startup["EGLM_hidden_requester_logistics_request_size"].value, settings.startup["EGLM_hidden_requester_chest_size"].value)
+r.logistic_slots_count = min_size -- made bigger to handle large cargo vehicles like cargo airplane
+r.inventory_size = settings.startup["EGLM_hidden_requester_chest_size"].value -- made bigger to handle large cargo vehicles like cargo airplane
 
 data:extend({r})
 
@@ -61,6 +62,6 @@ p.animation = {
     }
 }
 p.selectable_in_game = false
-p.inventory_size = 48
+p.inventory_size = settings.startup["EGLM_hidden_active_provider_chest_size"].value
 
 data:extend({p})

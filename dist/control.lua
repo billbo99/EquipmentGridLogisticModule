@@ -47,8 +47,18 @@ local function vehicleQueue(vehicle, schedule_tick)
     end
 end
 
+local function checkAndFillAmmo(vehicle)
+    if vehicle.valid then
+        -- game.print(vehicle.type)
+        if vehicle.type == "spider-vehicle" then
+            trunk = vehicle.get_inventory(defines.inventory.car_trunk)
+            ammo = vehicle.get_inventory(defines.inventory.car_ammo)
+        end
+    end
+end
+
 local function vehicleRelevant(vehicle)
-    if (vehicle.type == "car" or vehicle.type == "cargo-wagon") and vehicle.grid ~= nil then
+    if (vehicle.type == "car" or vehicle.type == "cargo-wagon" or vehicle.type == "spider-vehicle") and vehicle.grid ~= nil then
         local contents = vehicle.grid.get_contents()
         if contents["EquipmentGridLogisticModule"] ~= nil then
             return true
@@ -65,7 +75,7 @@ local function vehicleRegister(vehicle)
         mod.vehicles[vehicle.unit_number] = unit
 
         -- get the next scheduled execution tick
-        schedule_tick = (math.floor(game.tick / nth) * nth) + nth
+        local schedule_tick = (math.floor(game.tick / nth) * nth) + nth
         vehicleQueue(vehicle, schedule_tick)
     end
 end
@@ -77,6 +87,9 @@ local function vehiclePackup(vehicle)
         local provider = unit.provider
         if requester ~= nil then
             local trunk = nil
+            if vehicle.type == "spider-vehicle" then
+                trunk = vehicle.get_inventory(defines.inventory.car_trunk)
+            end
             if vehicle.type == "car" then
                 trunk = vehicle.get_inventory(defines.inventory.car_trunk)
             end
@@ -151,14 +164,21 @@ end
 
 local function vehicleReady(vehicle)
     local trunk = nil
+    local speed = 0
+    if vehicle.type == "spider-vehicle" then
+        trunk = vehicle.get_inventory(defines.inventory.car_trunk)
+        speed = 0
+    end
     if vehicle.type == "car" then
         trunk = vehicle.get_inventory(defines.inventory.car_trunk)
+        speed = vehicle.speed
     end
     if vehicle.type == "cargo-wagon" then
         trunk = vehicle.get_inventory(defines.inventory.cargo_wagon)
+        speed = vehicle.speed
     end
 
-    return trunk.is_filtered() and math.abs(vehicle.speed) < 0.1 and vehicle.surface.find_logistic_network_by_position(vehicle.position, vehicle.force) ~= nil
+    return trunk.is_filtered() and math.abs(speed) < 0.1 and vehicle.surface.find_logistic_network_by_position(vehicle.position, vehicle.force) ~= nil
 end
 
 local function vehicleProcess(vehicle)
@@ -169,6 +189,9 @@ local function vehicleProcess(vehicle)
     local provider = unit.provider
     if unit.max_provider_slot_count and unit.max_provider_slot_count > 0 then
         provider.get_inventory(defines.inventory.chest).set_bar(unit.max_provider_slot_count + 1)
+    elseif settings.startup["EGLM_hidden_active_provider_chest_unload_size"].value > 1 then
+        local bar_size = math.min(settings.startup["EGLM_hidden_active_provider_chest_unload_size"].value, settings.startup["EGLM_hidden_active_provider_chest_size"].value)
+        provider.get_inventory(defines.inventory.chest).set_bar(bar_size + 1)
     else
         provider.get_inventory(defines.inventory.chest).set_bar(2)
     end
@@ -178,6 +201,9 @@ local function vehicleProcess(vehicle)
     end
 
     local trunk = nil
+    if vehicle.type == "spider-vehicle" then
+        trunk = vehicle.get_inventory(defines.inventory.car_trunk)
+    end
     if vehicle.type == "car" then
         trunk = vehicle.get_inventory(defines.inventory.car_trunk)
     end
@@ -259,7 +285,7 @@ local function vehicleProcess(vehicle)
         if i > (unit.max_requester_slot_count or 6) then
             break
         end
-        if requester.logistic_network.get_item_count(name) > 0 then
+        if requester.logistic_network and requester.logistic_network.get_item_count(name) > 0 then
             requester.set_request_slot({name = name, count = count}, i)
             i = i + 1
         end
@@ -345,7 +371,7 @@ local function OnEntityCreated(event)
     InitState()
     local entity = event.created_entity
 
-    if entity.valid and (entity.type == "car" or entity.type == "cargo-wagon") then
+    if entity.valid and (entity.type == "car" or entity.type == "cargo-wagon" or entity.type == "spider-vehicle") then
         vehicleRegister(entity)
     end
 end
@@ -354,14 +380,14 @@ local function OnEntityRemoved(event)
     InitState()
     local entity = event.entity
 
-    if entity.valid and (entity.type == "car" or entity.type == "cargo-wagon") then
+    if entity.valid and (entity.type == "car" or entity.type == "cargo-wagon" or entity.type == "spider-vehicle") then
         vehicleUnregister(entity)
     end
 end
 
 local function vehicleFromGrid(grid)
     for _, surface in pairs(game.surfaces) do
-        local vehicles = surface.find_entities_filtered({type = {"car", "cargo-wagon"}})
+        local vehicles = surface.find_entities_filtered({type = {"car", "cargo-wagon", "spider-vehicle"}})
         for _, vehicle in ipairs(vehicles) do
             if vehicle.grid == grid then
                 return vehicle
@@ -391,6 +417,16 @@ local function OnRemovedEquipment(event)
     end
 end
 
+local function OnEntityCloned(event)
+    local src = event.source
+    local dst = event.destination
+
+    InitState()
+    if dst.valid and (dst.type == "car" or dst.type == "cargo-wagon" or dst.type == "spider-vehicle") then
+        vehicleRegister(dst)
+    end
+end
+
 local function OnNthTick(event)
     InitState()
     -- if there is no queued event for this tick then there is nothing todo
@@ -411,6 +447,8 @@ local function OnNthTick(event)
     for _, vehicle in ipairs(queue) do
         if vehicle.valid and mod.vehicles[vehicle.unit_number] ~= nil then
             local unit = mod.vehicles[vehicle.unit_number]
+
+            checkAndFillAmmo(vehicle)
 
             if vehicleReady(vehicle) then
                 note(vehicle.unit_number .. " ready")
@@ -435,6 +473,7 @@ local function attach_events()
     script.on_event({defines.events.on_player_placed_equipment}, OnPlacedEquipment)
     script.on_event({defines.events.on_player_removed_equipment}, OnRemovedEquipment)
     script.on_event({defines.events.on_train_changed_state}, OnTrainChangedState)
+    script.on_event({defines.events.on_entity_cloned}, OnEntityCloned)
 end
 
 script.on_init(
