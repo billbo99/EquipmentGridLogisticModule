@@ -1,14 +1,14 @@
 {
     "name": "EquipmentGridLogisticModule",
-    "version": "0.3.1",
-    "factorio_version": "1.0",
+    "version": "0.3.2",
+    "factorio_version": "1.0.0",
     "title": "Equipment Grid Logistic Module (logiquipment Revived)",
     "author": "billbo99",
     "contact": "",
     "homepage": "https://mods.factorio.com/mod/EquipmentGridLogisticModule",
     "description": "This mod takes 'dorfl' https://mods.factorio.com/mod/logiquipment mod and extends it to include the cargo wagon entity, for those of us who want construction trains.",
     "dependencies": [
-        "base >= 1.0",
+        "base >= 1.0.0",
         "?VehicleGrid"
     ]
 }
