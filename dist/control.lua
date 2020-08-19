@@ -60,7 +60,7 @@ end
 local function vehicleRelevant(vehicle)
     if (vehicle.type == "car" or vehicle.type == "cargo-wagon" or vehicle.type == "spider-vehicle") and vehicle.grid ~= nil then
         local contents = vehicle.grid.get_contents()
-        if contents["EquipmentGridLogisticModule"] ~= nil then
+        if contents["EquipmentGridLogisticModule"] ~= nil or contents["EquipmentGridLogisticModule_buffer"] ~= nil then
             return true
         end
     end
@@ -73,6 +73,13 @@ local function vehicleRegister(vehicle)
 
         local unit = mod.vehicles[vehicle.unit_number] or {vehicle = vehicle}
         mod.vehicles[vehicle.unit_number] = unit
+
+        local contents = vehicle.grid.get_contents()
+        if contents["EquipmentGridLogisticModule_buffer"] ~= nil then
+            unit.request_from_buffers = true
+        else
+            unit.request_from_buffers = false
+        end
 
         -- get the next scheduled execution tick
         local schedule_tick = (math.floor(game.tick / nth) * nth) + nth
@@ -399,7 +406,7 @@ end
 
 local function OnPlacedEquipment(event)
     local equipment = event.equipment
-    if equipment.name == "EquipmentGridLogisticModule" then
+    if equipment.name == "EquipmentGridLogisticModule" or equipment.name == "EquipmentGridLogisticModule_buffer" then
         local vehicle = vehicleFromGrid(event.grid)
         if vehicle ~= nil then
             vehicleRegister(vehicle)
@@ -409,7 +416,7 @@ end
 
 local function OnRemovedEquipment(event)
     local equipment = event.equipment
-    if equipment == "EquipmentGridLogisticModule" then
+    if equipment.name == "EquipmentGridLogisticModule" or equipment.name == "EquipmentGridLogisticModule_buffer" then
         local vehicle = vehicleFromGrid(event.grid)
         if vehicle ~= nil then
             vehicleUnregister(vehicle)
@@ -488,4 +495,34 @@ script.on_load(
         InitState()
         attach_events()
     end
+)
+
+script.on_event(
+    "battery-rotate",
+    function(e)
+        local module_table = {
+            ["EquipmentGridLogisticModule"] = "EquipmentGridLogisticModule_buffer",
+            ["EquipmentGridLogisticModule_buffer"] = "EquipmentGridLogisticModule"
+        }
+        local player = game.players[e.player_index]
+        if player.cursor_stack and player.cursor_stack.valid_for_read and module_table[player.cursor_stack.name] then
+            player.cursor_stack.set_stack {
+                name = module_table[player.cursor_stack.name],
+                count = player.cursor_stack.count
+            }
+        end
+    end
+)
+
+remote.add_interface(
+    "EquipmentGridLogisticModule",
+    {
+        on_entity_deployed = function(e)
+            local entity = e.entity
+            InitState()
+            if entity.valid and (entity.type == "car" or entity.type == "cargo-wagon" or entity.type == "spider-vehicle") then
+                vehicleRegister(entity)
+            end
+        end
+    }
 )

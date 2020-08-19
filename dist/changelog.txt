@@ -1,4 +1,16 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.4.1
+Date: 19. 08. 2020
+  Features:
+    - Added functionality to capture when AAI Vehicle deployer issues the on_entity_deployed so that I can check if my module is present.
+---------------------------------------------------------------------------------------------------
+Version: 0.4.0
+Date: 17. 08. 2020
+  Features:
+    - Press "R" while holding the "module" and it will change to buffer mode,  where the hidden requester chests will request from buffer chests.
+  Changes:
+    - Items now only stack in single quanties to handle the above change.
+---------------------------------------------------------------------------------------------------
 Version: 0.3.2
 Date: 16. 08. 2020
   Changes:

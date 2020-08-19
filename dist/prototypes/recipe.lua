@@ -6,8 +6,8 @@ data:extend(
             category = "crafting",
             subgroup = "transport",
             enabled = false,
-            icon = "__EquipmentGridLogisticModule__/icon.png",
-            icon_size = 32,
+            icon = "__EquipmentGridLogisticModule__/graphics/icons/requester-active-provider.png",
+            icon_size = 64,
             hidden = false,
             energy_required = 10.0,
             ingredients = {
