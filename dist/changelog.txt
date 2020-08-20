@@ -1,4 +1,10 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.4.2
+Date: 20. 08. 2020
+  Changes:
+    - Added a check that burner.inventory is valid before trying to traverse it
+    - Added a delay in detecting the module in the Vehicle grid, in case a mod has created a Vehicle and later cloned the vechicle_grid.
+---------------------------------------------------------------------------------------------------
 Version: 0.4.1
 Date: 19. 08. 2020
   Features:

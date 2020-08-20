@@ -1,5 +1,5 @@
 local mod = nil
-local debug = false
+local debug = true
 local nth = 20
 
 local max = math.max
@@ -9,6 +9,7 @@ local function InitState()
     mod = global
     mod.vehicles = mod.vehicles or {}
     mod.queues = mod.queues or {}
+    mod.watch_queue = mod.watch_queue or {}
 end
 
 local function serialize(t)
@@ -67,6 +68,15 @@ local function vehicleRelevant(vehicle)
     return false
 end
 
+local function addVehicleToWatchQueue(vehicle)
+    InitState()
+    local schedule_tick = game.tick + nth
+    if not mod.watch_queue[schedule_tick] then
+        mod.watch_queue[schedule_tick] = {}
+    end
+    table.insert(mod.watch_queue[schedule_tick], vehicle)
+end
+
 local function vehicleRegister(vehicle)
     if vehicleRelevant(vehicle) then
         note("vehicleRegister " .. vehicle.unit_number)
@@ -84,6 +94,8 @@ local function vehicleRegister(vehicle)
         -- get the next scheduled execution tick
         local schedule_tick = (math.floor(game.tick / nth) * nth) + nth
         vehicleQueue(vehicle, schedule_tick)
+    else
+        addVehicleToWatchQueue(vehicle)
     end
 end
 
@@ -240,15 +252,17 @@ local function vehicleProcess(vehicle)
 
     if vehicle.burner ~= nil then
         local inv = vehicle.burner.inventory
-        for name, _ in pairs(inv.get_contents()) do
-            if name ~= nil then
-                local available = trunk.get_item_count(name)
-                if available > 0 then
-                    local stack = {name = name, count = available}
-                    if inv.can_insert(stack) then
-                        local moved = vehicle.burner.inventory.insert(stack)
-                        if moved > 0 then
-                            trunk.remove({name = name, count = moved})
+        if inv.valid then
+            for name, _ in pairs(inv.get_contents()) do
+                if name ~= nil then
+                    local available = trunk.get_item_count(name)
+                    if available > 0 then
+                        local stack = {name = name, count = available}
+                        if inv.can_insert(stack) then
+                            local moved = vehicle.burner.inventory.insert(stack)
+                            if moved > 0 then
+                                trunk.remove({name = name, count = moved})
+                            end
                         end
                     end
                 end
@@ -438,6 +452,18 @@ local function OnNthTick(event)
     InitState()
     -- if there is no queued event for this tick then there is nothing todo
     local queue = {}
+
+    if mod.watch_queue then
+        for schedule_tick, work in pairs(mod.watch_queue) do
+            if schedule_tick <= event.tick then
+                for _, vehicle in pairs(work) do
+                    vehicleRegister(vehicle)
+                end
+                mod.watch_queue[schedule_tick] = nil
+            end
+        end
+    end
+
     for schedule_tick, work in pairs(mod.queues) do
         if schedule_tick <= event.tick then
             for _, job in pairs(work) do
@@ -492,8 +518,20 @@ script.on_init(
 
 script.on_load(
     function()
-        InitState()
+        -- InitState()
         attach_events()
+    end
+)
+
+script.on_configuration_changed(
+    function(e)
+        if e.mod_changes["EquipmentGridLogisticModule"] then
+            local old_version = e.mod_changes["EquipmentGridLogisticModule"].old_version
+            local new_version = e.mod_changes["EquipmentGridLogisticModule"].new_version
+            if old_version ~= new_version and new_version == "0.4.2" then
+                InitState()
+            end
+        end
     end
 )
 
@@ -525,4 +563,15 @@ remote.add_interface(
             end
         end
     }
+)
+
+script.on_event(
+    {defines.events.script_raised_built},
+    function(e)
+        local entity = e.entity
+        InitState()
+        if entity.valid and (entity.type == "car" or entity.type == "cargo-wagon" or entity.type == "spider-vehicle") then
+            vehicleRegister(entity)
+        end
+    end
 )
