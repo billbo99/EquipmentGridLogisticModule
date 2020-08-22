@@ -1,5 +1,5 @@
 local mod = nil
-local debug = true
+local debug = false
 local nth = 20
 
 local max = math.max
@@ -10,6 +10,7 @@ local function InitState()
     mod.vehicles = mod.vehicles or {}
     mod.queues = mod.queues or {}
     mod.watch_queue = mod.watch_queue or {}
+    mod.watch_count = mod.watch_count or {}
 end
 
 local function serialize(t)
@@ -59,7 +60,7 @@ local function checkAndFillAmmo(vehicle)
 end
 
 local function vehicleRelevant(vehicle)
-    if (vehicle.type == "car" or vehicle.type == "cargo-wagon" or vehicle.type == "spider-vehicle") and vehicle.grid ~= nil then
+    if vehicle and vehicle.valid and (vehicle.type == "car" or vehicle.type == "cargo-wagon" or vehicle.type == "spider-vehicle") and vehicle.grid ~= nil then
         local contents = vehicle.grid.get_contents()
         if contents["EquipmentGridLogisticModule"] ~= nil or contents["EquipmentGridLogisticModule_buffer"] ~= nil then
             return true
@@ -69,12 +70,27 @@ local function vehicleRelevant(vehicle)
 end
 
 local function addVehicleToWatchQueue(vehicle)
-    InitState()
-    local schedule_tick = game.tick + nth
-    if not mod.watch_queue[schedule_tick] then
-        mod.watch_queue[schedule_tick] = {}
+    if vehicle and vehicle.valid then
+        InitState()
+        local schedule_tick = game.tick + nth
+
+        if not mod.watch_queue[schedule_tick] then
+            mod.watch_queue[schedule_tick] = {}
+        end
+
+        if not mod.watch_count[vehicle.unit_number] then
+            mod.watch_count[vehicle.unit_number] = 0
+        else
+            mod.watch_count[vehicle.unit_number] = mod.watch_count[vehicle.unit_number] + 1
+        end
+
+        -- Only reschedule check 3x times before giving up.
+        if mod.watch_count[vehicle.unit_number] < 3 then
+            table.insert(mod.watch_queue[schedule_tick], vehicle)
+        else
+            mod.watch_count[vehicle.unit_number] = nil
+        end
     end
-    table.insert(mod.watch_queue[schedule_tick], vehicle)
 end
 
 local function vehicleRegister(vehicle)
@@ -430,7 +446,7 @@ end
 
 local function OnRemovedEquipment(event)
     local equipment = event.equipment
-    if equipment.name == "EquipmentGridLogisticModule" or equipment.name == "EquipmentGridLogisticModule_buffer" then
+    if equipment == "EquipmentGridLogisticModule" or equipment == "EquipmentGridLogisticModule_buffer" then
         local vehicle = vehicleFromGrid(event.grid)
         if vehicle ~= nil then
             vehicleUnregister(vehicle)
